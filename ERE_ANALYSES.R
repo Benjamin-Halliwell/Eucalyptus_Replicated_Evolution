@@ -40,8 +40,8 @@ theme_set(theme_classic())
 #------------------------------------------------------------------------#
 
 # TREES
-phy_sp <- readRDS("euc_phy_sp.rds") # species-level topology
-phy_ser_list <- readRDS("euc_phy_ser_list.rds") # list of candidate series-level topologies
+phy_sp <- readRDS("phy_euc_sp.rds") # species-level topology
+phy_ser_list <- readRDS("phy_euc_ser_list.rds") # list of candidate series-level topologies
 
 # DATA
 dat <- read.csv("euc_data.csv")

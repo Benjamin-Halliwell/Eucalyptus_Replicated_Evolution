@@ -224,77 +224,47 @@ ggtree(tree_samp[[1]], layout = 'rectangular') + geom_tiplab(size = 2, offset = 
 
 #------------------------------------------------------------------------#
 
-## SAVE TREES
+# prune to species in data
 phy_sp <- keep.tip(phy_2, dat_sp %>% pull(phylo) %>% unique) # prune to species in data
-saveRDS(phy_sp, "phy_euc_sp.rds")
 phy_ser_list <- lapply(phy_ser_list, keep.tip, dat_ser$series %>% unique) # prune to series in data
+
+## SAVE TREES
+saveRDS(phy_sp, "phy_euc_sp.rds")
 saveRDS(phy_ser_list, "phy_euc_ser_list.rds")
 
 #------------------------------------------------------------------------#
 
 ## LOAD IN EUCALYPTUS TRAIT DATA AND SUMMARISE
-
-# # TREES
-# phy_sp <- readRDS("phy_euc_sp.rds") # species-level topology
-# phy_ser_list <- readRDS("phy_euc_ser_list.rds") # list of candidate series-level topologies
-
+# TREES
+phy_sp <- readRDS("euc_phy_sp.rds") # species-level topology
+phy_ser_list <- readRDS("euc_phy_ser_list.rds") # list of candidate series-level topologies
 # DATA
-dat_all <- read.csv("euc_data.csv") %>% as_tibble
-dat_all
-
-## subset data for different analyses (species- and series-level phylogeny).
-# species level data
-dat_sp <- dat_all %>% 
-  mutate(phylo = taxon_sp) %>% filter(phylo %in% phy_2$tip.label) %>%
-  mutate(LA = scale(log(leaf_area))[,1],
-         LMA = scale(log(leaf_mass_per_area))[,1],
-         leaf_d13C = scale(log(abs(leaf_delta13C))*-1)[,1],
-         leaf_N = scale(log(leaf_N))[,1],
-         WD = scale(log(wood_density))[,1],
-         PH = scale(log(plant_height_taxon_sp))[,1],
-         moisture = scale(log(moisture_mean_taxon_sp))[,1],
-         temp = scale(log(temp_mean_taxon_sp))[,1],
-         BD_soil = scale(log(BD_mean_taxon_sp))[,1],
-         P_soil = scale(log(P_mean_taxon_sp))[,1])
-
-# series level data
-dat_ser <- dat_all %>% 
-  mutate(phylo = series) %>% filter(phylo %in% tree_samp[[1]]$tip.label) %>% 
-  mutate(LA = scale(log(leaf_area))[,1],
-         LMA = scale(log(leaf_mass_per_area))[,1],
-         leaf_d13C = scale(log(abs(leaf_delta13C))*-1)[,1],
-         leaf_N = scale(log(leaf_N))[,1],
-         WD = scale(log(wood_density))[,1],
-         PH = scale(log(plant_height_taxon_sp))[,1],
-         moisture = scale(log(moisture_mean_taxon_sp))[,1],
-         temp = scale(log(temp_mean_taxon_sp))[,1],
-         BD_soil = scale(log(BD_mean_taxon_sp))[,1],
-         P_soil = scale(log(P_mean_taxon_sp))[,1])
+dat <- read.csv("euc_data.csv") %>% as_tibble
 
 # ASSESS DATA COVERAGE
 mod_traits <- c("LA", "LMA", "leaf_N","leaf_d13C", "WD", "PH")
 
 # number of observations for each trait across all taxa
-dat_ser %>% select(all_of(mod_traits), -PH) %>% summarise_all(~ sum((!is.na(.))))
+dat %>% select(all_of(mod_traits), -PH) %>% summarise_all(~ sum((!is.na(.))))
 
 # ~40% of obs are associated with site level environmental data
-dat_ser %>% select(moisture_diff_taxon_sp) %>% filter(moisture_diff_taxon_sp!=0) %>% nrow
+dat %>% select(moisture_diff_taxon_sp) %>% filter(moisture_diff_taxon_sp!=0) %>% nrow
 
 # number of taxa compared to recognized species 767/901 = 85%
-dat_ser %>% pull(taxon_sp) %>% unique %>% length
+dat %>% pull(taxon_sp) %>% unique %>% length
 taxonomy %>% select(taxon_sp) %>% filter(str_detect(taxon_sp,"subsp", negate=T)) %>% filter(str_detect(taxon_sp,"_sp\\.", negate=T)) %>% unique %>% nrow()
 
 # number and proportion of species with observations for each trait
-data_coverage <- dat_ser %>% group_by(taxon_sp) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
+data_coverage <- dat %>% group_by(taxon_sp) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
 # proportion
 data_coverage %>% mutate(across(all_of(mod_traits), ~ ifelse(.>0,1,0))) %>% select(-1) %>% colSums() %>% `/`(length(unique(data_coverage$taxon_sp))) %>% round(2)
 # number
 data_coverage %>% mutate(across(all_of(mod_traits), ~ ifelse(.>0,1,0))) %>% select(-1) %>% colSums()
 
 # average number of obs for each trait at the taxon_sp (species) level
-data_coverage_sp <- dat_ser %>% group_by(taxon_sp) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
+data_coverage_sp <- dat %>% group_by(taxon_sp) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
 data_coverage_sp %>% select(-taxon_sp) %>% mutate(across(everything(), ~ na_if(., 0))) %>% colMeans(na.rm = T)
 # at the series level
-data_coverage_sp <- dat_ser %>% group_by(series) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
+data_coverage_sp <- dat %>% group_by(series) %>% summarise(across(all_of(mod_traits),~ sum(!is.na(.))))
 data_coverage_sp %>% select(-series) %>% mutate(across(everything(), ~ na_if(., 0))) %>% colMeans(na.rm = T)
 
