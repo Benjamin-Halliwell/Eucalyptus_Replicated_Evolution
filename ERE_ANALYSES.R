@@ -80,12 +80,12 @@ dat_ser <- dat %>% # series level data
 
 # run parameters
 n_resp = 10 # number of response variables in model
-n_tree = 10 # number of series-level trees to sample
+n_tree = 100 # number of series-level trees to sample
 n_chain = 4 # number of chains for model using species-level tree
 n_cores = 4 # number of cores for parallel processing
-nitts = 60
-burns = 10
-thins = 5
+nitts = 11000
+burns = 1000
+thins = 10
 shrink = 1 # mild shrinkage applied to make prior uniform (uninformative) on correlation coefficients
 
 # parameter expanded prior
@@ -99,7 +99,8 @@ p_exp <- list(G = list(G1=list(V=diag(n_resp), nu=n_resp+shrink, alpha.mu = rep(
               R = list(V=diag(n_resp), nu=n_resp, fix = 6)) # fix residual variances of species-level traits
 
 # set up cluster to run models in parallel
-result_list <- list();gc() # list for mod results
+result_list_ser <- list() # list for mod results
+result_list_sp <- list()# list for mod results
 cl <- makeCluster(n_cores)
 clusterEvalQ(cl,  library(tidyverse))
 clusterEvalQ(cl,  library(MCMCglmm))
@@ -110,7 +111,7 @@ registerDoParallel(cl)
 ## SERIES LEVEL TREE
 
 # fit dummy model
-C <- MCMCglmm::inverseA(phy_ser_list[[1]])$Ainv
+C_ser <- MCMCglmm::inverseA(phy_ser_list[[1]])$Ainv
 fit_ser <- MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_soil, BD_soil) ~ 
                                 trait-1 + # fit separate intercept for each trait
                                 at.level(trait,"LA"):temp_diff_taxon_sp + at.level(trait,"LA"):moisture_diff_taxon_sp + at.level(trait,"LA"):P_diff_taxon_sp + at.level(trait,"LA"):BD_diff_taxon_sp + # taxon_sp anomalies
@@ -126,7 +127,7 @@ fit_ser <- MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_
                                 idh(at.level(trait,"leaf_d13C")):dataset_id +
                                 idh(at.level(trait,"WD")):dataset_id,
                     rcov     = ~idh(trait):units, # (within-species) residual variance
-                    ginv     = list(phylo = C),
+                    ginv     = list(phylo = C_ser),
                     family   = rep("gaussian", n_resp),
                     nitt     = 11,
                     burnin   = 1,
@@ -135,10 +136,10 @@ fit_ser <- MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_
                     prior    = p_exp,
                     pr = T, pl = T, saveX = T, saveZ = T, verbose = F)
 saveRDS(fit_ser, "fit_ser.rds")
-# run
+# run (takes >12 hours for n_tree=100. Reduce nitts/burns/thins to reduce compute time)
 {
-  result_list <- foreach(i=1:n_tree) %dopar% {
-    C <- MCMCglmm::inverseA(phy_ser_list[[i]])$Ainv
+  result_list_ser <- foreach(i=1:n_tree) %dopar% {
+    C_ser <- MCMCglmm::inverseA(phy_ser_list[[i]])$Ainv
     fit_ser <- MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_soil, BD_soil) ~ 
                                     trait-1 + # fit separate intercept for each trait
                                     at.level(trait,"LA"):temp_diff_taxon_sp + at.level(trait,"LA"):moisture_diff_taxon_sp + at.level(trait,"LA"):P_diff_taxon_sp + at.level(trait,"LA"):BD_diff_taxon_sp + # taxon_sp anomalies
@@ -154,7 +155,7 @@ saveRDS(fit_ser, "fit_ser.rds")
                                     idh(at.level(trait,"leaf_d13C")):dataset_id +
                                     idh(at.level(trait,"WD")):dataset_id,
                         rcov     = ~idh(trait):units, # (within-species) residual variance
-                        ginv     = list(phylo = C),
+                        ginv     = list(phylo = C_ser),
                         family   = rep("gaussian", n_resp),
                         nitt     = nitts,
                         burnin   = burns,
@@ -167,7 +168,7 @@ saveRDS(fit_ser, "fit_ser.rds")
          pars = list(n_resp = n_resp, n_tree = n_tree, nitts = nitts, burns = burns, thins = thins))
   }
 }
-setwd(getwd());saveRDS(result_list, "result_list_ser.rds");gc()
+setwd(getwd());saveRDS(result_list_ser, "result_list_ser.rds");gc()
 
 
 #------------------------------------------------------------------------#
@@ -175,7 +176,7 @@ setwd(getwd());saveRDS(result_list, "result_list_ser.rds");gc()
 ## SPECIES LEVEL TREE
 
 # fit dummy model
-C <- MCMCglmm::inverseA(phy_sp)$Ainv
+C_sp <- MCMCglmm::inverseA(phy_sp)$Ainv
 fit_sp <- MCMCglmm::MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_soil, BD_soil) ~
                                          trait-1 + # fit separate intercept for each trait
                                          at.level(trait,"LA"):temp_diff_taxon_sp + at.level(trait,"LA"):moisture_diff_taxon_sp + at.level(trait,"LA"):P_diff_taxon_sp + at.level(trait,"LA"):BD_diff_taxon_sp +
@@ -191,7 +192,7 @@ fit_sp <- MCMCglmm::MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moi
                                          idh(at.level(trait,"leaf_d13C")):dataset_id +
                                          idh(at.level(trait,"WD")):dataset_id,
                              rcov     = ~idh(trait):units,
-                             ginv     = list(phylo = C),
+                             ginv     = list(phylo = C_sp),
                              family   = rep("gaussian", n_resp),
                              nitt     = 11,
                              burnin   = 1,
@@ -202,8 +203,8 @@ fit_sp <- MCMCglmm::MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moi
 saveRDS(fit_sp, "fit_sp.rds")
 # run
 {
-  result_list <- foreach(i=1:n_chain) %dopar% {
-    C <- MCMCglmm::inverseA(phy_sp)$Ainv
+  result_list_sp <- foreach(i=1:n_chain) %dopar% {
+    C_sp <- MCMCglmm::inverseA(phy_sp)$Ainv
     fit_sp <- MCMCglmm::MCMCglmm(cbind(WD, LMA, leaf_N, leaf_d13C, LA, PH, temp, moisture, P_soil, BD_soil) ~
                                    trait-1 + # fit separate intercept for each trait
                                    at.level(trait,"LA"):temp_diff_taxon_sp + at.level(trait,"LA"):moisture_diff_taxon_sp + at.level(trait,"LA"):P_diff_taxon_sp + at.level(trait,"LA"):BD_diff_taxon_sp +
@@ -219,7 +220,7 @@ saveRDS(fit_sp, "fit_sp.rds")
                                    idh(at.level(trait,"leaf_d13C")):dataset_id +
                                    idh(at.level(trait,"WD")):dataset_id,
                                  rcov     = ~idh(trait):units,
-                                 ginv     = list(phylo = C),
+                                 ginv     = list(phylo = C_sp),
                                  family   = rep("gaussian", n_resp),
                                  nitt     = nitts,
                                  burnin   = burns,
@@ -232,21 +233,27 @@ saveRDS(fit_sp, "fit_sp.rds")
          pars = list(n_resp = n_resp, n_chain = n_chain, nitts = nitts, burns = burns, thins = thins))
   }
 }
-setwd(getwd());saveRDS(result_list, "result_list_sp.rds");gc()
+setwd(getwd());saveRDS(result_list_sp, "result_list_sp.rds");gc()
 
 
 #---------------------------LOAD MODEL------------------------------#
 
 # Models above were fit specifying phylogenetic effects at two different taxonomic levels (either the 
 # series level [fit_ser] or species level [fit_sp]) to assess the influence of phylogenetic structure 
-# on parameter estimates. The series level analyses also allow for data on additional species to be 
-# included (see methods). To generate results from the workflow below, first choose which model you 
-# would like to assess:
+# on parameter estimates. The series level analyses are preferable because they account for phylogenetic 
+# uncertainty and allow data on additional species to be included (see methods), though species-level
+# analyses may provide better resolution for species-level traits (i.e., max height).
+# To generate results from the workflow below, choose which model to assess by running the relevant chunk below:
+
+# load save fits
+fit_ser <- readRDS("fit_ser.rds")
+result_list_ser <- readRDS("result_list_ser.rds")
+fit_sp <- readRDS("fit_sp.rds")
+result_list_sp <- readRDS("result_list_sp.rds")
 
 ## SERIES LEVEL
-# fit_ser <- readRDS("fit_ser.rds")
-# result_list <- readRDS("result_list_ser.rds")
 # combine samples across tree fits
+result_list <- result_list_ser
 res_Sol <- result_list %>% purrr::map("fit") %>% purrr::map_dfr(~ .x[['Sol']])
 res_VCV <- result_list %>% purrr::map("fit") %>% purrr::map_dfr(~ .x[['VCV']])
 res <- dplyr::bind_cols(dplyr::select(res_Sol, -tree, -iter), res_VCV)
@@ -258,12 +265,11 @@ mod <- fit_ser
 mod_dat <- dat_ser
 
 # ## SPECIES LEVEL
-# fit_sp <- readRDS("fit_sp.rds")
-# result_list <- readRDS("result_list_sp.rds")
 # # combine samples across chains
+# result_list <- result_list_sp
 # res_Sol <- result_list %>% purrr::map("fit") %>% purrr::map_dfr(~ .x[['Sol']])
 # res_VCV <- result_list %>% purrr::map("fit") %>% purrr::map_dfr(~ .x[['VCV']])
-# res <- dplyr::bind_cols(dplyr::select(res_Sol, -tree, -iter), res_VCV)
+# res <- dplyr::bind_cols(dplyr::select(res_Sol, -chain, -iter), res_VCV)
 # # fill dummy model with samples
 # fit_sp$Sol <- res_Sol %>% select(-c(chain,iter)) %>% as.mcmc
 # fit_sp$VCV <- res_VCV %>% select(-c(chain,iter)) %>% as.mcmc
@@ -358,6 +364,9 @@ ggpubr::ggarrange(
 # perform leave-one-out (LOO) cross validation (CV) to assess model predictive performance.
 # We preform LOO-CV by leaving out all observations for a single species with each iteration.
 
+# # load saved runs
+# loo_pred_fit_ser <- readRDS("loo_pred_fit_ser.rds")
+
 # run parameters
 trees = phy_ser_list
 # trees = list(phy_sp) # for species level analyses [fit_sp]
@@ -368,13 +377,12 @@ burnin = 300
 thin = 3
 n_cores = 4
 
-## RUN LOO (takes >12 hours. Reduce nitt/burnin/thin to reduce compute time)
+## RUN LOO (takes >24 hours. Reduce nitt/burnin/thin to reduce compute time)
 loo_pred_fit_ser <- loo_cv_species(fit = mod, data = mod_dat, trees = trees, prior = p_exp, n_species = n_species,
                                    part.1 = "phylo", part.2 = "taxon_sp", calc_cor = TRUE, res_cor = FALSE, 
                                    family = rep("gaussian", n_resp), n_resp = n_resp, resp_names = resp_names,
                                    cores = n_cores, nitt = nitt, burnin = burnin, thin = thin)
 saveRDS(loo_pred_fit_ser, "loo_pred_fit_ser.rds")
-# loo_pred_fit_ser <- readRDS("loo_pred_fit_ser.rds")
 
 
 ## VALIDATE CORRELATIONS
@@ -633,9 +641,7 @@ ggplot(plot_var,
   guides(fill=guide_legend("")) +
   theme(axis.text = element_text(size=14),
         axis.title.x = element_text(size=18),
-        legend.text= element_text(size=16),
-        plot.margin = margin(0.2,1,0.2,0.2, "cm"),
-        legend.box.spacing = unit(4, "cm")) +
+        legend.text= element_text(size=16)) +
   ylab("proportion of variance") + xlab("") + 
   coord_flip()
 
@@ -730,7 +736,7 @@ comb[lower.tri(comb)] <- cor_list$matrices$phy_mat[lower.tri(cor_list$matrices$p
 comb[upper.tri(comb)] <- cor_list$matrices$ind_mat[upper.tri(cor_list$matrices$ind_mat)]
 dimnames(comb)[[1]] <- c("wood density","LMA","leaf N per area","leaf d13C","leaf area","max height","temperature","moisture","soil P","soil bulk density")
 dimnames(comb)[[2]] <- c("wood density","LMA","leaf N per area","leaf d13C","leaf area","max height","temperature","moisture","soil P","soil bulk density")
-corrplot::corrplot(comb, method = "square", cl.pos = "n", tl.col = "black", tl.cex = 1.25, addCoef.col ='black', number.cex = 1.15, diag = F, col = colorRampPalette(c("red","white", "blue"))(10))
+corrplot::corrplot(comb, method = "square", cl.pos = "n", tl.col = "black", tl.cex = 1.25, addCoef.col ='black', number.cex = 1, diag = F, col = colorRampPalette(c("red","white", "blue"))(10))
 
 
 #-------------------ANCESTRAL STATE RECONSTRUCTION----------------------#
@@ -739,13 +745,16 @@ corrplot::corrplot(comb, method = "square", cl.pos = "n", tl.col = "black", tl.c
 # represent a cause or a consequence of transitions in aridity tolerance. Do so assuming
 # 1) pure Brownian Motion and 2) a shift model including a directional trend toward more arid
 # environments from the Miocene boundary (23 Mya), consistent with known trends in Australia's
-# paleoclimatic history.
+# paleoclimatic history. These analyses require the species-level tree and fit.
 
-# # load dummy model and fill with concatenated chains from parallel run
+# # load dummy model and parallel run
 # fit_sp <- readRDS("fit_sp.rds")
-# result_list <- readRDS("result_list_sp.rds")
-# fit_sp$Sol <- result_list %>% purrr::map("fit")  %>% lapply(function (x) x[c('Sol')]) %>% purrr::map(bind_rows) %>% bind_rows()
-# fit_sp$VCV <- result_list %>% purrr::map("fit")  %>% lapply(function (x) x[c('VCV')]) %>% purrr::map(bind_rows) %>% bind_rows()
+# result_list_sp <- readRDS("result_list_sp.rds")
+
+# fill dummy model with concatenated chains from parallel run
+result_list <- result_list_sp
+fit_sp$Sol <- result_list %>% purrr::map("fit") %>% lapply(function (x) x[c('Sol')]) %>% purrr::map(bind_rows) %>% bind_rows() %>% as.mcmc
+fit_sp$VCV <- result_list %>% purrr::map("fit") %>% lapply(function (x) x[c('VCV')]) %>% purrr::map(bind_rows) %>% bind_rows() %>% as.mcmc
 
 # prepare data for ASR
 dat_sum <- dat_sp %>% group_by(taxon_sp) %>% dplyr::select(moisture_mean_taxon_sp) %>% distinct
@@ -826,7 +835,7 @@ d.trans.comb.BM <- tibble()
 trans.tab.BM <- tibble(iter=NULL,A_A=NULL,A_S=NULL,M_M=NULL,M_S=NULL,S_A=NULL,S_M=NULL,S_S=NULL)
 res.obs.MR.BM <- c()
 
-# run
+# run (takes several hours for n_samp=100. Reduce nitts/burns/thins to reduce compute time)
 for (i in sample(1:nrow(model$VCV),n_samp)){
   
   # extract ancestral state estimates per posterior draw (n_samp draws)
@@ -1198,14 +1207,15 @@ for(i in 2:length(edge.ind)) painted<-paintBranches(painted,phy$edge[i,2],state=
 plot(painted,colors=cols,lwd=1,split.vertical=TRUE,outline=F,fsize=0.025, offset = 0.75, type = "fan", ftype="off")
 
 # tip labels
-d.points <- d.trans.post.mean %>% select(anc,des.phy.label, des.moisture) %>% 
-  filter(str_detect(des.phy.label, "node", negate = T)) %>%
-  mutate(arid_cat = ifelse(des.moisture > S_cut, "M", 
-                           ifelse(des.moisture > A_cut & des.moisture <= S_cut, "S", "A")))
-state<-setNames(as.factor(d.points %>% pull(arid_cat)), d.points %>% pull(des.phy.label))
+d.points <- d.asr %>% select(taxon_sp, moisture_mean_taxon_sp) %>% distinct() %>% 
+  mutate(arid_cat = ifelse(moisture_mean_taxon_sp > S_cut, "M", 
+                           ifelse(moisture_mean_taxon_sp > A_cut & moisture_mean_taxon_sp <= S_cut, 
+                                  "S", "A")))
+d.points <- d.points[order(match(d.points$taxon_sp,phy_sp$tip.label)),]
+state<-setNames(as.factor(d.points %>% pull(arid_cat)), d.points %>% pull(taxon_sp))
 cols2 <- c("navy", "gold","red");names(cols2) <- c("M","S","A")
 tiplabels(cex = 0.75, pch = 20,
-          col = cols2[as.character(state[d.points %>% pull(des.phy.label)])])
+          col = cols2[as.character(state[d.points %>% pull(taxon_sp)])])
 
 # arc labels
 arc.cladelabels(text="Eudesmia",node=findMRCA(painted, dat_sp %>% filter(subgenus=="Eudesmia") %>% pull(taxon_sp)),ln.offset=1.03,lab.offset=1.075,cex=1.25,lwd=2.5, orientation = "horizontal")

@@ -183,6 +183,10 @@ phy_2 <- bind.tree(phy_2, clade, where = 751, position = position)
 phy_2$node.label <- paste0("node",1:phy_2$Nnode)
 phy_2 <- drop.tip(phy_2, 681)
 phy_2$edge.length[1316] <- phy_2$edge.length[1316] + adjust + position
+phy_2$edge.length[phy_2$edge.length == 0] <- 0.001 # fix zero length branches
+phy_2 <- force.ultrametric(phy_2, method = "extend") # make ultrametric
+phy_2 <- ape::rotate(phy_2, node = 773)
+phy_2 <- untangle(phy_2, method = "read.tree")
 
 # augmented topology
 ggtree(phy_2, layout = 'rectangular') + geom_tiplab(size = 0.4, offset = 0)
@@ -228,8 +232,9 @@ ggtree(tree_samp[[1]], layout = 'rectangular') + geom_tiplab(size = 2, offset = 
 dat <- read.csv("euc_data.csv") %>% as_tibble
 
 # prune trees to taxa in data
-phy_sp <- keep.tip(phy_2, dat %>% filter(taxon_sp %in% phy_2$tip.label) %>%  pull(taxon_sp) %>% unique) # prune to species in data
-phy_ser_list <- lapply(phy_ser_list, keep.tip, dat$series %>% unique) # prune to series in data
+phy_sp <- keep.tip(phy_2, dat %>% filter(taxon_sp %in% phy_2$tip.label) %>% pull(taxon_sp) %>% unique) # prune to species in data
+phy_sp$node.label <- paste0("node",1:phy_sp$Nnode) # update node labels
+phy_ser_list <- lapply(tree_samp, keep.tip, dat$series %>% unique) # prune to series in data
 
 ## SAVE TREES
 saveRDS(phy_sp, "euc_phy_sp.rds")
@@ -240,10 +245,10 @@ saveRDS(phy_ser_list, "euc_phy_ser_list.rds")
 ## SUMMARISE EUCALYPTUS TRAIT DATA
 
 # ASSESS DATA COVERAGE
-mod_traits <- c("LA", "LMA", "leaf_N","leaf_d13C", "WD", "PH")
+mod_traits <- c("leaf_area", "leaf_mass_per_area", "leaf_N","leaf_delta13C", "wood_density", "plant_height_taxon_sp")
 
 # number of observations for each trait across all taxa
-dat %>% select(all_of(mod_traits), -PH) %>% summarise_all(~ sum((!is.na(.))))
+dat %>% select(all_of(mod_traits), -plant_height_taxon_sp) %>% summarise_all(~ sum((!is.na(.))))
 
 # ~40% of obs are associated with site level environmental data
 dat %>% select(moisture_diff_taxon_sp) %>% filter(moisture_diff_taxon_sp!=0) %>% nrow
