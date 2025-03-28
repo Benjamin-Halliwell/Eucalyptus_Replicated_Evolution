@@ -224,22 +224,20 @@ ggtree(tree_samp[[1]], layout = 'rectangular') + geom_tiplab(size = 2, offset = 
 
 #------------------------------------------------------------------------#
 
-# prune to species in data
-phy_sp <- keep.tip(phy_2, dat_sp %>% pull(phylo) %>% unique) # prune to species in data
-phy_ser_list <- lapply(phy_ser_list, keep.tip, dat_ser$series %>% unique) # prune to series in data
+# LOAD IN TRAIT DATA
+dat <- read.csv("euc_data.csv") %>% as_tibble
+
+# prune trees to taxa in data
+phy_sp <- keep.tip(phy_2, dat %>% filter(taxon_sp %in% phy_2$tip.label) %>%  pull(taxon_sp) %>% unique) # prune to species in data
+phy_ser_list <- lapply(phy_ser_list, keep.tip, dat$series %>% unique) # prune to series in data
 
 ## SAVE TREES
-saveRDS(phy_sp, "phy_euc_sp.rds")
-saveRDS(phy_ser_list, "phy_euc_ser_list.rds")
+saveRDS(phy_sp, "euc_phy_sp.rds")
+saveRDS(phy_ser_list, "euc_phy_ser_list.rds")
 
 #------------------------------------------------------------------------#
 
-## LOAD IN EUCALYPTUS TRAIT DATA AND SUMMARISE
-# TREES
-phy_sp <- readRDS("euc_phy_sp.rds") # species-level topology
-phy_ser_list <- readRDS("euc_phy_ser_list.rds") # list of candidate series-level topologies
-# DATA
-dat <- read.csv("euc_data.csv") %>% as_tibble
+## SUMMARISE EUCALYPTUS TRAIT DATA
 
 # ASSESS DATA COVERAGE
 mod_traits <- c("LA", "LMA", "leaf_N","leaf_d13C", "WD", "PH")
