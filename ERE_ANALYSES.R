@@ -318,7 +318,7 @@ ppc_dens_overlay(y = y, yrep = yrep, size = 0.75) # plot param dist from each tr
 ## NOTE
 # 2 out of 100 trees (38 and 58) produce markedly stronger estimates for trait correlations
 yrep %>% rowMeans() %>% hist(breaks=30)
-# however excluding samples from models fit to these trees (code below) DOES NOT CHANGE RESULT
+# however excluding samples from models fit to these trees (code below) DOES NOT CHANGE RESULTS
 
 # # exclude outlier trees
 # res_Sol <- res_Sol %>% filter(!tree%in%c(38,58));gc()
